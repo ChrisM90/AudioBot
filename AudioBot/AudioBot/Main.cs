@@ -19,6 +19,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using NAudio.Wave.SampleProviders;
 using System.Collections.Concurrent;
+using System.Text;
 
 namespace AudioBot
 {
@@ -136,13 +137,25 @@ namespace AudioBot
                 this.CaptureInstance = new WasapiLoopbackCapture(SelectedDevice);
                 this.CaptureInstance.WaveFormat = new WaveFormat(48000, 16, 2);
                 this.CaptureInstance.ShareMode = AudioClientShareMode.Shared;
-                AO = audioClient.CreatePCMStream(AudioApplication.Voice);
+                AO = audioClient.CreatePCMStream(AudioApplication.Music);
+                BufferedWaveProvider bwp = new BufferedWaveProvider(this.CaptureInstance.WaveFormat);
+                bwp.BufferDuration = new TimeSpan(0, 0, 3);
+                bwp.DiscardOnBufferOverflow = true;
+                TimeSpan OneSecond = new TimeSpan(0, 0, 1);
+                byte[] copybuffer;
 
                 this.CaptureInstance.DataAvailable += async (s, a) =>
                 {
                     try
                     {
-                        await AO.WriteAsync(a.Buffer, 0, a.BytesRecorded);
+                        bwp.AddSamples(a.Buffer, 0, a.BytesRecorded);
+                        
+                        if (bwp.BufferedDuration > OneSecond)
+                        {
+                            copybuffer = new byte[(bwp.BufferedBytes / 2)];
+                            bwp.Read(copybuffer,0 , copybuffer.Length);
+                            await AO.WriteAsync(copybuffer, 0, copybuffer.Length);
+                        }
                     }
                     finally
                     { }
@@ -157,6 +170,7 @@ namespace AudioBot
                 this.CaptureInstance.StartRecording();
                 Recording = true;
                 audioDropdown.Enabled = false;
+                joinChannel.Enabled = false;
                 startStopAudio.Text = "Stop Audio";
             }
             else
@@ -164,6 +178,7 @@ namespace AudioBot
                 this.CaptureInstance.StopRecording();
                 Recording = false;
                 audioDropdown.Enabled = true;
+                joinChannel.Enabled = true;
                 startStopAudio.Text = "Start Audio";
             }
         }
